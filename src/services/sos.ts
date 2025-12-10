@@ -2,6 +2,7 @@
 import { db } from "./firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { Coordinates } from "./location";
+import { auth } from "./firebase";
 
 export type SosMethod = "button" | "shake" | "voice" | "geofence";
 
@@ -54,7 +55,6 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
     reasons.push("High GPS accuracy for responders");
   }
 
-  // Clamp score 0–100
   if (score < 0) score = 0;
   if (score > 100) score = 100;
 
@@ -73,8 +73,11 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
 export async function triggerSos(method: SosMethod, coords?: Coordinates) {
   const { score, level, summary } = computeRiskScore(method, coords);
 
+  const user = auth.currentUser;
+  const userId = user ? user.uid : "anonymous";
+
   await addDoc(collection(db, "sosRequests"), {
-    userId: "demo-user", // later: real user id
+    userId,
     createdAt: serverTimestamp(),
     status: "ACTIVE",
     method,

@@ -1,396 +1,308 @@
-# SafeRoute SOS – Smart Personal Safety & Geo-Fence App
+### 14.1 – `README.md` Content
 
-SafeRoute SOS is an Expo React Native app that helps vulnerable users trigger **smart SOS alerts** with:
+````md
+# GuardianSOS 👁️‍🗨️🚨  
+Smart Personal Safety with Live Location, Geo-Fence Alerts & Offline SOS
 
-- 📍 **Live location tracking**
-- 🛡️ **Geo-fence safe zones**
-- 📵 **Offline SMS fallback**
+## 1. Problem
 
-Built for **[Hackathon Name]**, focused on **women’s safety / vulnerable users** in real-world situations.
+In emergencies, people often:
 
----
+- Can’t unlock their phone, open an app, and type messages.
+- Don’t know their exact location to share.
+- Have poor internet connectivity.
+- Have no central record of incidents to refer back to.
 
-## ✨ Highlights
-
-- Big, friendly **one-tap SOS** experience  
-- **Risk-scored alerts** so responders can prioritize  
-- **Geo-fence auto-SOS** when leaving a safe zone  
-- **Works even with poor internet** via SMS fallback  
-- Clean, modular code with a **services layer** and Firebase backend
+This leads to **delayed help** and **unsafe outcomes**.
 
 ---
 
-## 🚨 Core Features (MVP)
+## 2. Solution – GuardianSOS
 
-### 1. Big SOS Button (Online)
+GuardianSOS is a mobile safety companion that lets you:
 
-- One tap sends an SOS alert to Firebase Firestore.
-- Includes:
-  - Live **GPS coordinates** (lat, lng, accuracy)
-  - Basic **device & method info**
-- Stored in `sosRequests` collection for responders/admins.
+- Trigger SOS via **one-tap button** (and extendable to shake/voice).
+- Attach **live GPS location** & risk score to every alert.
+- Get **geo-fence based auto-SOS** when you leave a safe zone.
+- Fall back to **SMS with Google Maps link** when internet is weak.
+- Maintain a **personal safety history** per user.
 
----
-
-### 2. Smart Risk Scoring (AI-ish)
-
-Every SOS event is enriched with basic “intelligence”:
-
-- `riskScore` → number from **0–100**
-- `riskLevel` → `LOW` / `MEDIUM` / `HIGH`
-- `aiSummary` → short text explaining the context
-
-Risk is computed using:
-
-- **Trigger method**: `button`, `geofence`, (later: `shake`, `voice`, etc.)
-- **Time of day**: night hours = higher risk
-- **GPS quality**: poor accuracy = higher risk (more uncertain situation)
-
-This allows future dashboards to **prioritize high-risk SOS** instead of treating all alerts equally.
+The app is designed to be simple enough for anyone to use in panic, but smart enough to assist responders.
 
 ---
 
-### 3. Live Map View
+## 3. Core Features
 
-- Map screen built with `react-native-maps`
-- Shows the user’s **current GPS location** on a map
-- Great for demo: “This is where the person is right now.”
+### ✅ Authentication & Profiles
+- Email/password login & signup (Firebase Auth).
+- Per-user **profile** stored in Firestore:
+  - Full name
+  - Primary emergency contact
+  - Secondary contact
 
----
+### ✅ SOS Triggers
+- **Big SOS button** on Home:
+  - Grabs current GPS location.
+  - Stores alert in Firestore as `sosRequests`.
+  - Tags each alert with:
+    - `userId`
+    - `status`
+    - `method` (button / geofence / future: shake/voice)
+    - `location` (lat, lng, accuracy)
+    - `riskScore` (0–100)
+    - `riskLevel` (LOW / MEDIUM / HIGH)
+    - `aiSummary` (human-readable risk explanation)
 
-### 4. Geo-Fence Safe Zone
+### ✅ Smart Risk Scoring (AI-ish Logic)
+- Lightweight scoring based on:
+  - Trigger method (button / geofence / shake / voice).
+  - Time of day (night vs evening vs day).
+  - GPS accuracy.
+- Generates an **“AI summary”** like:
+  > Risk Level: HIGH (Score: 78/100). Voice-triggered SOS. Triggered during night hours. High GPS accuracy for responders.
 
-- User can mark their **current location** as a **safe zone** and start a “trip.”
-- The app:
-  - Stores that point as `safeZoneCenter`
-  - Defines a radius (e.g. `200m`)
-  - Watches GPS updates while the trip is “active”
-- If user moves **outside the radius** → automatic SOS:
-  - `method: "geofence"`
-  - Includes location, riskScore, riskLevel, aiSummary
+### ✅ Geo-Fence Safe Trip
+- User selects current location as **safe zone**.
+- App tracks movement (while screen is active).
+- If user moves **outside radius** (e.g. 200m):
+  - Auto-triggers SOS with `method: "geofence"`.
+  - Shows alerts to the user.
+- Good for: walking home, cab rides, late-night travel.
 
-This simulates real-world scenarios like:
+### ✅ Offline SMS Fallback
+- Uses Expo SMS to open the device SMS app with:
+  - Custom SOS message.
+  - **Google Maps link**: `https://www.google.com/maps?q=lat,lng`
+- Recipients are loaded from user’s **Profile** (Firestore).
+- Works even when internet is weak (as long as SMS works).
 
-> “If I leave college or home unexpectedly, auto-alert my family.”
-
----
-
-### 5. Offline / Low-Network SMS SOS
-
-When the internet is weak or unavailable:
-
-- User can tap **“SOS via SMS (Offline Fallback)”**
-- App:
-  - Gets current GPS coordinates
-  - Opens the phone’s SMS app with:
-    - Pre-filled message: “SOS, I am in danger…”
-    - **Google Maps link**:  
-      `https://www.google.com/maps?q=<lat>,<lng>`
-
-This ensures the user can **still send location-based SOS** using just SMS.
-
----
-
-## 🧠 Tech Stack
-
-**Frontend**
-
-- React Native (Expo, TypeScript)
-- `@react-navigation/native`, `@react-navigation/native-stack`
-- `react-native-maps`
-- `expo-location`
-- `expo-sms`
-
-**Backend**
-
-- **Firebase**
-  - Firestore (stores SOS events and metadata)
-  - (Future) Auth, Storage, Cloud Functions
+### ✅ Live Map & History
+- **Map screen**:
+  - Shows user’s current location on a map with a marker.
+- **History screen**:
+  - Lists all SOS alerts for the logged-in user.
+  - Sorted newest → oldest.
+  - Shows method, risk level, timestamp, AI summary.
 
 ---
 
-## 🏗️ High-Level Architecture
+## 4. Tech Stack
 
-```text
-Mobile App (Expo React Native)
-       ⬇
-Services Layer (src/services/)
-  • location.ts  → getCurrentLocation(), watchPosition()
-  • sos.ts       → triggerSos(), risk scoring, Firestore writes
-  • sms.ts       → offline SMS composition with maps link
-  • firebase.ts  → Firebase + Firestore initialization
-       ⬇
-Firebase Firestore
-  Collection: sosRequests
-    - userId
-    - createdAt
-    - status (e.g. "ACTIVE")
-    - method ("button" | "geofence" | ...)
-    - location { lat, lng, accuracy }
-    - riskScore (0–100)
-    - riskLevel ("LOW" | "MEDIUM" | "HIGH")
-    - aiSummary (short context string)
+- **Frontend:** React Native + Expo
+- **Navigation:** React Navigation (native stack)
+- **Backend:** Firebase
+  - Authentication (Email/Password)
+  - Firestore (profiles, sosRequests)
+- **Device APIs:**
+  - `expo-location` (GPS & geofencing logic)
+  - `react-native-maps` (map UI)
+  - `expo-sms` (SMS fallback)
+
+---
+
+## 5. Project Structure
+
+```txt
+sos-safety-app/
+  App.tsx
+  src/
+    config/
+      theme.ts
+    context/
+      AuthContext.tsx
+    navigation/
+      RootNavigator.tsx
+    screens/
+      LoginScreen.tsx
+      HomeScreen.tsx
+      MapScreen.tsx
+      GeoFenceScreen.tsx
+      ProfileScreen.tsx
+      HistoryScreen.tsx
+    components/
+      SosButton.tsx
+    services/
+      firebase.ts
+      location.ts
+      sos.ts
+      sms.ts
 ````
 
-### How to Explain It (For Judges)
-
-> “We built an Expo React Native app with a services layer and Firebase backend.
-> On the frontend, the user interacts with three main flows: manual SOS, geo-fence safe trips, and SMS fallback.
-> All SOS events go through a central `triggerSos` function which does a lightweight risk analysis – we compute a risk score based on trigger type, time of day, and GPS quality, and store that in Firestore.
-> This way, responders or family members can quickly prioritize high-risk alerts.”
-
----
-
-## 📱 App Flow (User Journey)
-
-1. **Login / Entry**
-
-   * User opens the app and sees a simple entry screen.
-   * Taps “Continue” → navigates to Home.
-
-2. **Home – SOS Dashboard**
-
-   * Big red **SOS button**
-   * Button to **view current location on map**
-   * Button to **start geo-fence safe trip**
-   * Button for **SOS via SMS (offline fallback)**
-
-3. **Emergency Flows**
-
-   **a) Manual SOS (Online)**
-
-   * User taps **Big Red SOS**
-   * App:
-
-     * Requests location
-     * Calls `triggerSos("button", coords)`
-     * Computes risk score and summary
-     * Writes record to Firestore (`sosRequests`)
-
-   **b) Geo-Fence Safe Trip**
-
-   * User goes to **GeoFence screen**
-   * Taps “Set Safe Zone & Start Trip”
-   * App:
-
-     * Saves current location as `safeZoneCenter`
-     * Starts watching GPS updates
-     * If outside radius (e.g. 200m) → `triggerSos("geofence", coords)`
-
-   **c) Live Map View**
-
-   * User navigates to **Map screen**
-   * Sees their current position with a marker using `react-native-maps`
-
-   **d) SOS via SMS (Offline Fallback)**
-
-   * User taps **SOS via SMS**
-   * App:
-
-     * Gets location
-     * Opens SMS app with message:
-
-       * “SOS, I am in danger…”
-       * `https://www.google.com/maps?q=lat,lng`
+* `services/firebase.ts` – Firebase initialization (Auth + Firestore).
+* `services/location.ts` – Permission + current GPS helpers.
+* `services/sos.ts` – Central SOS logic + risk scoring + Firestore writes.
+* `services/sms.ts` – Reads emergency contacts & opens SMS with link.
+* `screens/` – UI pages.
+* `AuthContext.tsx` – Watches auth state and routes login / app stack.
 
 ---
 
-## 🗂️ Project Structure
+## 6. Setup Instructions (Dev)
 
-```text
-src/
-  components/
-    SosButton.tsx        # Big RED SOS button + triggers + SMS fallback
-  navigation/
-    RootNavigator.tsx    # Navigation between screens
-  screens/
-    LoginScreen.tsx      # Simple entry/login screen
-    HomeScreen.tsx       # Main SOS dashboard
-    MapScreen.tsx        # Shows current location on map
-    GeoFenceScreen.tsx   # Safe zone + auto SOS on exit
-  services/
-    firebase.ts          # Firebase init + Firestore instance
-    location.ts          # Location helpers (getCurrentLocation, watch)
-    sos.ts               # triggerSos, risk scoring, Firestore writes
-    sms.ts               # SMS fallback with Google Maps link
-App.tsx                  # App root: wraps RootNavigator, providers, etc.
+1. Clone repo & install:
+
+   ```bash
+   npm install
+   ```
+
+2. Create a Firebase project and enable:
+
+   * Authentication → Email/Password
+   * Firestore Database
+
+3. Copy your Firebase config to:
+
+   ```ts
+   // src/services/firebase.ts
+   const firebaseConfig = { ... };
+   ```
+
+4. Install Expo dependencies:
+
+   ```bash
+   npx expo install react-native-screens react-native-safe-area-context
+   npx expo install react-native-gesture-handler react-native-reanimated
+   npx expo install expo-location react-native-maps expo-sms
+   ```
+
+5. Update `babel.config.js`:
+
+   ```js
+   module.exports = function (api) {
+     api.cache(true);
+     return {
+       presets: ["babel-preset-expo"],
+       plugins: ["react-native-reanimated/plugin"],
+     };
+   };
+   ```
+
+6. Run:
+
+   ```bash
+   npx expo start
+   ```
+
+---
+
+## 7. How It Works (High-Level Architecture)
+
+1. **User Authenticates**
+
+   * Firebase Auth issues a user ID (`uid`).
+   * `AuthContext` listens to auth state and controls navigation.
+
+2. **Profile Setup**
+
+   * User fills name + phone numbers in Profile screen.
+   * Saved to Firestore: `profiles/{uid}`.
+
+3. **Triggering SOS**
+
+   * SOS button / geo-fence calls `triggerSos(method, coords)`.
+   * `triggerSos`:
+
+     * Computes `riskScore`, `riskLevel`, `aiSummary`.
+     * Writes to `sosRequests` with `userId = uid`.
+
+4. **Offline SMS**
+
+   * Reads `profiles/{uid}`.
+   * Builds SOS message + Maps link.
+   * Uses device SMS to send to `primaryNumber` & `secondaryNumber`.
+
+5. **History View**
+
+   * Queries `sosRequests` where `userId == currentUser.uid`.
+   * Streams updates in real time using `onSnapshot`.
+
+---
+
+## 8. Future Enhancements
+
+* Shake-to-SOS using accelerometer.
+* Always-on voice keyword (“help me”) SOS.
+* Danger heatmap using aggregated SOS data.
+* Trusted network: nearby volunteers + responders.
+* Multi-language UI and messages.
+
 ```
 
 ---
 
-## 🔧 Setup & Run Locally
+### 14.2 – 60–90 Second Pitch Script (Say This to Judges)
 
-### 1. Clone & Install
+You can literally memorize or adapt this:
 
-```bash
-# Clone the repo
-git clone https://github.com/<your-username>/saferoute-sos.git
-cd saferoute-sos
+> **“Hi, I’m \<your name\> and this is GuardianSOS, a smart personal safety app.**  
+> 
+> In real emergencies people don’t have time to unlock their phone, open WhatsApp and share live location. Internet might be weak, and they may not even know where they are.  
+> 
+> GuardianSOS solves this with **one-tap SOS**, **auto geo-fence alerts**, and an **offline SMS fallback**.  
+> 
+> When a user feels unsafe, they just tap the big SOS button. We capture their **live GPS**, compute a **risk score** based on method and time of day, and store an incident in Firestore with an AI-style summary.  
+> 
+> If they start a ‘Safe Trip’, we monitor their movement. If they leave their safe zone—like getting taken away from home or their usual route—we automatically trigger a geo-fence SOS.  
+> 
+> And if internet is weak, we switch to **SMS**: we open the phone’s SMS app with an emergency message and a **Google Maps link** to their exact location, sent to their trusted contacts from their profile.  
+> 
+> Every alert is saved to a **personal safety history**, so they or authorities can see what happened and when.  
+> 
+> Technically, we built this with **React Native + Expo**, **Firebase Auth + Firestore**, `expo-location`, `react-native-maps`, and `expo-sms`.  
+> 
+> Our vision is to turn this into a deployable safety companion for students, women, and elderly, with extensions like shake-to-SOS, voice triggers, and danger heatmaps.”  
 
-# Install dependencies
-npm install
+---
+
+### 14.3 – Live Demo Flow (Step-by-Step for Stage)
+
+When demoing, do **this exact sequence**:
+
+1. **Login / Signup**
+   - Show quick signup.
+   - “Every user has their own profile & contacts.”
+
+2. **Profile Setup**
+   - Open Profile.
+   - Show name + two emergency contacts.
+   - “These numbers receive SOS messages.”
+
+3. **Home Overview**
+   - Show the beautiful home screen.
+   - Highlight sections: big SOS, quick actions, history.
+
+4. **Online SOS**
+   - Hit the big SOS button.
+   - Show “SOS sent with location”.
+   - Quickly switch to Firestore console → show new `sosRequests` doc:
+     - `userId`, `location`, `riskScore`, `riskLevel`, `aiSummary`.
+
+5. **Map View**
+   - Open Map → show your live location.
+
+6. **Geo-Fence**
+   - Open GeoFence screen.
+   - “Set safe zone & start trip”.
+   - (If you can simulate movement, do it; if not, explain quickly.)
+
+7. **SMS Fallback**
+   - Tap “SOS via SMS” button.
+   - Show SMS app opening with pre-filled message + Google Maps link.
+   - Optional: teammate’s phone showing the SMS.
+
+8. **History**
+   - Open History screen.
+   - Show list of SOS alerts with risk badges & summaries.
+
+That’s a **killer demo**.
+
+---
+
+If you want, next we can:
+
+- Tighten code in any file you’re unsure about
+- Plan how to divide work between teammates (who does what)
+- Or add **one more “sexy” feature** if you still have time (like shake-to-SOS or a mini “Danger score” banner on Home)
+
+For now, if you create `README.md` with that content and practice the pitch + demo flow, you are **hackathon-ready**. 🚀
 ```
-
-### 2. Configure Firebase
-
-1. Create a Firebase project at the Firebase Console.
-2. Enable **Firestore**.
-3. Get your web config (apiKey, authDomain, projectId, etc.).
-4. Update `src/services/firebase.ts` with your config.
-
-> You can use environment variables or hardcoded config for hackathon demo.
-
-### 3. Install Expo & Native Modules
-
-```bash
-npx expo install \
-  expo-location \
-  expo-sms \
-  react-native-maps \
-  react-native-gesture-handler \
-  react-native-reanimated \
-  react-native-screens \
-  react-native-safe-area-context
-```
-
-### 4. Run the App
-
-```bash
-npx expo start
-```
-
-* Open in **Expo Go** on a real device (recommended for GPS & SMS).
-* Or run on an emulator (location simulation possible).
-
----
-
-## 🧮 Risk Scoring Logic (Simple Version)
-
-Inside `src/services/sos.ts` (conceptually):
-
-1. **Base score** based on method:
-
-   * `button` → medium base risk
-   * `geofence` → slightly higher (unexpected movement)
-   * (future: `shake` / `voice` → can be even higher)
-
-2. **Time of day**:
-
-   * Night hours (e.g. 9pm–6am) → add extra risk
-
-3. **GPS accuracy**:
-
-   * Poor accuracy (big radius) → add uncertainty → higher risk
-
-4. **Map to level**:
-
-   * 0–30 → `LOW`
-   * 31–70 → `MEDIUM`
-   * 71–100 → `HIGH`
-
-5. Generate a simple `aiSummary`, such as:
-
-> “High-risk SOS via geo-fence at night with moderate GPS accuracy.”
-
-This is intentionally simple but **feels intelligent** and is easy to extend later.
-
----
-
-## 🧪 Demo Script (For Hackathon)
-
-Use this outline during your demo:
-
-1. **Intro (10–20 sec)**
-
-   > “Hi, we built SafeRoute SOS, a smart personal safety app that helps vulnerable users trigger an intelligent SOS, even in low-network situations.”
-
-2. **Flow 1 – Manual SOS (Online)**
-
-   * Show **Home screen**
-   * Tap **Big Red SOS**
-   * Explain:
-
-     > “This sends an SOS to Firebase with live GPS, a computed risk score, and a short context summary.”
-   * Quickly show the `sosRequests` document in Firestore.
-
-3. **Flow 2 – Live Map**
-
-   * Open **Map screen**
-   * Show your marker
-   * Explain:
-
-     > “Responders or family can see exactly where the user is.”
-
-4. **Flow 3 – Geo-Fence Safe Trip**
-
-   * Open **GeoFence screen**, tap “Set Safe Zone & Start Trip”
-   * Explain the concept (you don’t have to walk):
-
-     > “Before leaving home/college, the user sets this as a safe zone. If they move outside this radius, the app automatically triggers a geo-fence SOS.”
-
-5. **Flow 4 – Offline SMS**
-
-   * Tap **SOS via SMS**
-   * Show SMS app with:
-
-     * Pre-filled text
-     * Google Maps link
-   * Explain:
-
-     > “Even with poor internet, the user can still send an SOS with location using SMS.”
-
-6. **Wrap Up / Why It’s Smart**
-
-   > “Every SOS event is scored with a risk level, so in the future we can show family or police a prioritized queue of alerts instead of random messages.
-   > The design is modular, Firebase-based, and ready to extend with shake detection, voice triggers, and a web dashboard.”
-
----
-
-## 👥 Team Roles (Suggested)
-
-If you’re working as a team, you can divide tasks like this:
-
-* **You – Lead / Architect**
-
-  * Explain architecture & codebase
-  * Integrations, final debugging
-  * Drive live demo
-
-* **Teammate 1 – UI & UX**
-
-  * Polish Home screen (cards, colors, icons)
-  * Add SOS history list from `sosRequests`
-  * Improve wording / multilingual labels
-
-* **Teammate 2 – Features & Settings**
-
-  * Simple user profile (local or Firebase Auth)
-  * Settings screen for emergency SMS contacts
-  * Show `riskLevel` chips in SOS history
-
-* **Teammate 3 – Presentation**
-
-  * Final PPT (problem → solution → architecture → demo)
-  * Architecture & user flow diagrams
-  * Assist during live demo
-
----
-
-## 🚀 Future Enhancements
-
-* ✅ Real user auth with **Firebase Authentication**
-* ✅ Trusted contacts (family, friends, community)
-* ✅ **Danger heatmap** from SOS history (city safety layer)
-* ✅ Shake & voice triggers (accelerometer + speech)
-* ✅ Cloud evidence locker (audio/video in Firebase Storage)
-* ✅ Web / admin dashboard for monitoring active SOS and risk levels
-
----
-
-## 📄 License
-
-Add your preferred license here (MIT, Apache-2.0, etc.).
-
----
-
-
