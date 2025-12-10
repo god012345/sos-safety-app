@@ -1,15 +1,86 @@
-import React from "react";
-import { View, Text, StyleSheet, Button, ScrollView } from "react-native";
+import React, { useRef, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Button,
+  ScrollView,
+  Alert,
+  TouchableOpacity,
+} from "react-native";
 import SosButton from "../components/SosButton";
 import { auth } from "../services/firebase";
 import { signOut } from "firebase/auth";
 import { colors, spacing } from "../config/theme";
+import {
+  useShakeToSos,
+  useFallDetectionSos,
+  useInactivitySos,
+} from "../hooks/useSensorSos";
+import { triggerSos } from "../services/sos";
+import { getCurrentLocation } from "../services/location";
 
 type HomeScreenProps = { navigation: any };
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
+  // 🔄 Activate multi-mode SOS sensors while on Home
+  useShakeToSos(true);
+  useFallDetectionSos(true);
+  useInactivitySos(false); // set to true for inactivity demo if you want
+
+  const [secretCount, setSecretCount] = useState(0);
+  const secretTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleLogout = () => {
     signOut(auth);
+  };
+
+  // 🕵️ Secret gesture: tap app title 5 times within 3 seconds
+  const handleSecretTap = async () => {
+    if (secretTimerRef.current) {
+      clearTimeout(secretTimerRef.current);
+    }
+
+    setSecretCount((prev) => {
+      const next = prev + 1;
+
+      if (next >= 5) {
+        // secret pattern matched
+        (async () => {
+          try {
+            const coords = await getCurrentLocation();
+            await triggerSos("secret", coords);
+            Alert.alert("Secret SOS", "Hidden SOS sent to your contacts.");
+          } catch (e: any) {
+            Alert.alert("Error", e?.message || "Failed to send secret SOS");
+          }
+        })();
+
+        // reset
+        secretTimerRef.current = null;
+        return 0;
+      }
+
+      // reset counter if no further taps in 3 seconds
+      secretTimerRef.current = setTimeout(() => {
+        setSecretCount(0);
+        secretTimerRef.current = null;
+      }, 3000);
+
+      return next;
+    });
+  };
+
+  // 🎙️ Voice SOS (demo) – calls the same pipeline a voice command would
+  const handleVoiceSosDemo = async () => {
+    try {
+      const coords = await getCurrentLocation();
+      await triggerSos("voice", coords);
+      Alert.alert("Voice SOS", 'Simulated "Help me" command SOS sent.');
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to send voice SOS");
+    }
   };
 
   return (
@@ -17,7 +88,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       <ScrollView contentContainerStyle={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.appTitle}>GuardianSOS</Text>
+          <TouchableOpacity onPress={handleSecretTap} activeOpacity={0.8}>
+            <Text style={styles.appTitle}>GuardianSOS</Text>
+          </TouchableOpacity>
           <Text style={styles.tagline}>
             Smart personal safety with live location, geo-fence alerts & offline
             SOS.
@@ -77,6 +150,18 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               />
               <Text style={styles.actionHint}>
                 Update emergency phone numbers
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.actionRow}>
+            <View style={styles.actionItem}>
+              <Button
+                title="Voice SOS (Demo)"
+                onPress={handleVoiceSosDemo}
+              />
+              <Text style={styles.actionHint}>
+                Simulated “Help me” voice SOS
               </Text>
             </View>
           </View>

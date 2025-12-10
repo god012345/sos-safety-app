@@ -4,7 +4,14 @@ import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { Coordinates } from "./location";
 import { auth } from "./firebase";
 
-export type SosMethod = "button" | "shake" | "voice" | "geofence";
+export type SosMethod =   | "button"
+  | "shake"
+  | "voice"
+  | "geofence"
+  | "secret"
+  | "fall"
+  | "inactivity"
+  | "power";
 
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
@@ -17,14 +24,14 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
   let reasons: string[] = [];
 
   // Base score by method
-  switch (method) {
+    switch (method) {
     case "button":
       score += 40;
       reasons.push("Manual SOS button pressed");
       break;
     case "shake":
-      score += 60;
-      reasons.push("Detected shake pattern (possible struggle)");
+      score += 55;
+      reasons.push("Detected strong shake pattern (possible struggle)");
       break;
     case "voice":
       score += 70;
@@ -34,7 +41,24 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
       score += 55;
       reasons.push("User left safe geo-fence area unexpectedly");
       break;
+    case "secret":
+      score += 60;
+      reasons.push("Secret gesture used (discreet SOS)");
+      break;
+    case "fall":
+      score += 75;
+      reasons.push("Possible fall detected from motion pattern");
+      break;
+    case "inactivity":
+      score += 50;
+      reasons.push("No movement detected for extended period");
+      break;
+    case "power":
+      score += 80;
+      reasons.push("Hardware power button pattern triggered SOS");
+      break;
   }
+
 
   // Time-based adjustment
   const hour = new Date().getHours();
