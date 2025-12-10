@@ -1,10 +1,10 @@
 // src/services/sos.ts
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { Coordinates } from "./location";
-import { auth } from "./firebase";
 
-export type SosMethod =   | "button"
+export type SosMethod =
+  | "button"
   | "shake"
   | "voice"
   | "geofence"
@@ -21,10 +21,10 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
   summary: string;
 } {
   let score = 0;
-  let reasons: string[] = [];
+  const reasons: string[] = [];
 
   // Base score by method
-    switch (method) {
+  switch (method) {
     case "button":
       score += 40;
       reasons.push("Manual SOS button pressed");
@@ -59,7 +59,6 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
       break;
   }
 
-
   // Time-based adjustment
   const hour = new Date().getHours();
   if (hour >= 22 || hour < 5) {
@@ -79,6 +78,7 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
     reasons.push("High GPS accuracy for responders");
   }
 
+  // Clamp 0–100
   if (score < 0) score = 0;
   if (score > 100) score = 100;
 
@@ -115,5 +115,8 @@ export async function triggerSos(method: SosMethod, coords?: Coordinates) {
     riskScore: score,
     riskLevel: level,
     aiSummary: summary,
+    hasEvidence: false,
+    evidenceUrl: null,
+    acceptedByHelper: null,
   });
 }
