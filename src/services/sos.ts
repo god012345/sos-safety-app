@@ -5,9 +5,76 @@ import type { Coordinates } from "./location";
 
 export type SosMethod = "button" | "shake" | "voice" | "geofence";
 
+type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
+
+function computeRiskScore(method: SosMethod, coords?: Coordinates): {
+  score: number;
+  level: RiskLevel;
+  summary: string;
+} {
+  let score = 0;
+  let reasons: string[] = [];
+
+  // Base score by method
+  switch (method) {
+    case "button":
+      score += 40;
+      reasons.push("Manual SOS button pressed");
+      break;
+    case "shake":
+      score += 60;
+      reasons.push("Detected shake pattern (possible struggle)");
+      break;
+    case "voice":
+      score += 70;
+      reasons.push("Voice-triggered SOS (hands may be blocked)");
+      break;
+    case "geofence":
+      score += 55;
+      reasons.push("User left safe geo-fence area unexpectedly");
+      break;
+  }
+
+  // Time-based adjustment
+  const hour = new Date().getHours();
+  if (hour >= 22 || hour < 5) {
+    score += 15;
+    reasons.push("Triggered during night hours");
+  } else if (hour >= 18 && hour < 22) {
+    score += 5;
+    reasons.push("Triggered during evening hours");
+  }
+
+  // Location accuracy adjustment
+  if (coords?.accuracy && coords.accuracy > 50) {
+    score -= 5;
+    reasons.push("Lower GPS accuracy");
+  } else if (coords?.accuracy && coords.accuracy <= 20) {
+    score += 5;
+    reasons.push("High GPS accuracy for responders");
+  }
+
+  // Clamp score 0–100
+  if (score < 0) score = 0;
+  if (score > 100) score = 100;
+
+  let level: RiskLevel = "LOW";
+  if (score >= 70) level = "HIGH";
+  else if (score >= 45) level = "MEDIUM";
+
+  const summary =
+    `Risk Level: ${level} (Score: ${score}/100). ` +
+    reasons.join(". ") +
+    ".";
+
+  return { score, level, summary };
+}
+
 export async function triggerSos(method: SosMethod, coords?: Coordinates) {
+  const { score, level, summary } = computeRiskScore(method, coords);
+
   await addDoc(collection(db, "sosRequests"), {
-    userId: "demo-user", // later: real logged-in user id
+    userId: "demo-user", // later: real user id
     createdAt: serverTimestamp(),
     status: "ACTIVE",
     method,
@@ -18,5 +85,8 @@ export async function triggerSos(method: SosMethod, coords?: Coordinates) {
           accuracy: coords.accuracy ?? null,
         }
       : null,
+    riskScore: score,
+    riskLevel: level,
+    aiSummary: summary,
   });
 }

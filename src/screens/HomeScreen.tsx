@@ -1,12 +1,10 @@
 import React from "react";
 import { View, Text, StyleSheet, Button } from "react-native";
 import SosButton from "../components/SosButton";
-import type { RootStackParamList } from "../navigation/RootNavigator";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Home">;
+type HomeScreenProps = { navigation: any };
 
-export default function HomeScreen({ navigation }: Props) {
+export default function HomeScreen({ navigation }: HomeScreenProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Home – SOS Dashboard</Text>
@@ -22,6 +20,13 @@ export default function HomeScreen({ navigation }: Props) {
         <Button
           title="View My Location on Map"
           onPress={() => navigation.navigate("Map")}
+        />
+      </View>
+
+      <View style={{ marginTop: 16, width: "70%" }}>
+        <Button
+          title="Start Geo-Fence Safe Trip"
+          onPress={() => navigation.navigate("GeoFence")}
         />
       </View>
 

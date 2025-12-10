@@ -6,24 +6,27 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Button,
 } from "react-native";
 import { getCurrentLocation } from "../services/location";
 import { triggerSos } from "../services/sos";
+import { sendEmergencySms } from "../services/sms";
 
 export default function SosButton() {
   const [status, setStatus] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [smsLoading, setSmsLoading] = useState(false);
 
-  const handlePress = async () => {
+  const handleAppSos = async () => {
     try {
       setLoading(true);
       setStatus("Getting location...");
       const coords = await getCurrentLocation();
 
-      setStatus("Sending SOS...");
+      setStatus("Sending SOS via internet...");
       await triggerSos("button", coords);
 
-      setStatus("✅ SOS sent with location!");
+      setStatus("✅ SOS sent with location (online)!");
     } catch (error: any) {
       console.error(error);
       setStatus("❌ " + (error.message || "Failed to send SOS"));
@@ -32,13 +35,35 @@ export default function SosButton() {
     }
   };
 
+  const handleSmsSos = async () => {
+    try {
+      setSmsLoading(true);
+      setStatus("Getting location for SMS...");
+      const coords = await getCurrentLocation();
+
+      setStatus("Opening SMS app with emergency message...");
+      const result = await sendEmergencySms(coords);
+
+      if (result === "sent") {
+        setStatus("✅ SMS SOS sent!");
+      } else {
+        setStatus("⚠️ SMS cancelled by user.");
+      }
+    } catch (error: any) {
+      console.error(error);
+      setStatus("❌ " + (error.message || "Failed to send SMS SOS"));
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
   return (
     <View style={styles.wrapper}>
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
         activeOpacity={0.8}
-        onPress={handlePress}
-        disabled={loading}
+        onPress={handleAppSos}
+        disabled={loading || smsLoading}
       >
         {loading ? (
           <ActivityIndicator size="large" />
@@ -46,6 +71,19 @@ export default function SosButton() {
           <Text style={styles.buttonText}>SOS</Text>
         )}
       </TouchableOpacity>
+
+      <View style={styles.smsButtonWrapper}>
+        <Button
+          title={
+            smsLoading
+              ? "Preparing SMS..."
+              : "Send SOS via SMS (Offline Fallback)"
+          }
+          onPress={handleSmsSos}
+          disabled={loading || smsLoading}
+        />
+      </View>
+
       {status ? <Text style={styles.status}>{status}</Text> : null}
     </View>
   );
@@ -77,6 +115,10 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: "bold",
     letterSpacing: 2,
+  },
+  smsButtonWrapper: {
+    marginTop: 20,
+    width: 260,
   },
   status: {
     marginTop: 12,
