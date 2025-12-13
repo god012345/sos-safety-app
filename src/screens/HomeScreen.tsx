@@ -27,7 +27,7 @@ import { getCurrentLocation } from "../services/location";
 import type { Coordinates } from "../services/location";
 import { triggerSos } from "../services/sos";
 import { sendEmergencySms, getEmergencyProfileForCurrentUser } from "../services/sms";
-
+import { createVerifiedHelper } from "../services/verifiedHelper";
 type HomeScreenProps = { navigation: any };
 
 type PendingSms = {
@@ -432,6 +432,15 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
         {/* FOOTER */}
         <View style={styles.footer}>
+          {/* <Button
+  title="Create Demo Helper"
+  onPress={() =>
+    createVerifiedHelper("Helper One", {
+      lat: 12.97,
+      lng: 77.59,
+    })
+  }
+/> */}
           <Button title="Logout" onPress={handleLogout} color={colors.textSecondary} />
           <Text style={styles.footerText}>
             Tip: You can also shake your phone to trigger SOS with auto countdown, or tap the GuardianSOS title 5 times for a silent SOS.
