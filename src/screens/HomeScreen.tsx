@@ -91,7 +91,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     );
   };
 
-  // Start the 60s timer whenever any (non-secret) SOS is created
+  // Countdown-enabled SMS flow (used by sensors: shake, fall, inactivity, voice)
   const startAutoSmsFlow = useCallback(
     (coords?: Coordinates, riskSummary?: string) => {
       if (!hasEmergencyContacts) {
@@ -118,18 +118,61 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       }
 
       setPendingSms({ coords, riskSummary });
-      setCountdown(60); // 60 seconds
+      setCountdown(15); // 15-second countdown
     },
     [hasEmergencyContacts, demoMode, navigation]
   );
 
-  // Cancel flow if user taps "Cancel SOS"
+  const AutoSms = useCallback(
+  async (coords?: Coordinates, riskSummary?: string) => {
+    if (!hasEmergencyContacts) {
+      Alert.alert(
+        "No Emergency Contacts",
+        "Please add emergency contacts in Profile screen first.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Add Contacts", onPress: () => navigation.navigate("Profile") }
+        ]
+      );
+      return;
+    }
+
+    // Disable countdown completely
+    setCountdown(null);
+    setPendingSms(null);
+
+    if (demoMode) {
+      Alert.alert(
+        "Demo Mode",
+        "In demo mode, SMS is simulated. No real messages sent."
+      );
+      return;
+    }
+
+    try {
+      // 🚨 Send SMS immediately
+      await sendEmergencySms(coords, riskSummary);
+
+      Alert.alert(
+        "SMS Sent",
+        "Emergency message has been sent to your contacts."
+      );
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert("Error", e?.message || "Failed to send SMS");
+    }
+  },
+  [hasEmergencyContacts, demoMode, navigation]
+);
+
+
+  // Cancel auto SMS
   const cancelAutoSmsFlow = useCallback(() => {
     setCountdown(null);
     setPendingSms(null);
   }, []);
 
-  // Decrease countdown every second
+  // Countdown tick
   useEffect(() => {
     if (countdown === null) return;
     if (countdown <= 0) return;
@@ -141,7 +184,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     return () => clearTimeout(id);
   }, [countdown]);
 
-  // When countdown reaches 0, send SMS automatically
+  // When countdown ends → send SMS
   useEffect(() => {
     if (countdown !== 0 || !pendingSms || !pendingSms.coords) return;
 
@@ -172,7 +215,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     })();
   }, [countdown, pendingSms, demoMode]);
 
-  // Handle shake SOS: create SOS + start auto-SMS (no popup)
+  // Shake SOS → countdown ON
   const handleShakeSos = useCallback(async () => {
     try {
       const coords = await getCurrentLocation();
@@ -183,7 +226,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     }
   }, [startAutoSmsFlow]);
 
-  // Handle fall SOS: create SOS + start auto-SMS (no popup)
+  // Fall SOS → countdown ON
   const handleFallSos = useCallback(async () => {
     try {
       const coords = await getCurrentLocation();
@@ -194,7 +237,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     }
   }, [startAutoSmsFlow]);
 
-  // Handle inactivity SOS: create SOS + start auto-SMS (no popup)
+  // Inactivity SOS → countdown ON
   const handleInactivitySos = useCallback(async () => {
     try {
       const coords = await getCurrentLocation();
@@ -205,12 +248,12 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     }
   }, [startAutoSmsFlow]);
 
-  // Activate multi-mode SOS sensors while on Home
+  // Activate sensors
   useShakeToSos(true, handleShakeSos);
   useFallDetectionSos(true, handleFallSos);
   useInactivitySos(false, handleInactivitySos);
 
-  // Secret tap: 5x on title -> silent SOS (no timer, no SMS, no alerts)
+  // Secret Tap SOS → NO countdown
   const handleSecretTap = () => {
     if (secretTimerRef.current) {
       clearTimeout(secretTimerRef.current);
@@ -243,7 +286,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     });
   };
 
-  // Voice SOS (demo): create SOS + start auto-SMS (no popup)
+  // Voice SOS → countdown ON
   const handleVoiceSosDemo = async () => {
     try {
       const coords = await getCurrentLocation();
@@ -257,14 +300,18 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Header */}
+        
+        {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <TouchableOpacity onPress={handleSecretTap} activeOpacity={0.8}>
               <Text style={styles.appTitle}>GuardianSOS</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.demoBadge, { backgroundColor: demoMode ? colors.success : colors.danger }]}
+              style={[
+                styles.demoBadge, 
+                { backgroundColor: demoMode ? colors.success : colors.danger }
+              ]}
               onPress={toggleDemoMode}
             >
               <Text style={styles.demoText}>
@@ -272,10 +319,11 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               </Text>
             </TouchableOpacity>
           </View>
+
           <Text style={styles.tagline}>
             Smart personal safety with multi-mode SOS, live location, geo-fence alerts & offline SMS fallback.
           </Text>
-          
+
           {!hasEmergencyContacts && (
             <TouchableOpacity 
               style={styles.contactWarning}
@@ -288,26 +336,28 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           )}
         </View>
 
-        {/* SOS section */}
+        {/* SOS SECTION */}
         <View style={styles.sosSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Emergency</Text>
             {hasEmergencyContacts && (
               <Text style={styles.contactsInfo}>
-                📞 {contactsCount} contact{contactsCount !== 1 ? 's' : ''} ready
+                📞 {contactsCount} contact{contactsCount !== 1 ? "s" : ""} ready
               </Text>
             )}
           </View>
+
           <Text style={styles.sectionSubtitle}>
             Press the SOS button if you feel unsafe. We attach your live location, compute a risk score, and alert your trusted contacts.
           </Text>
 
           <View style={{ marginTop: spacing.l }}>
-            <SosButton onAfterSos={startAutoSmsFlow} />
+            {/* SOS BUTTON → NO COUNTDOWN */}
+            <SosButton onAfterSos={AutoSms} />
           </View>
         </View>
 
-        {/* Quick actions */}
+        {/* QUICK ACTIONS */}
         <View style={styles.actionsCard}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
 
@@ -356,7 +406,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
 
           <View style={styles.actionRow}>
-            <View style={[styles.actionItem, { width: '100%' }]}>
+            <View style={[styles.actionItem, { width: "100%" }]}>
               <Button 
                 title="Voice SOS (Demo)" 
                 onPress={handleVoiceSosDemo} 
@@ -369,7 +419,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         </View>
 
-        {/* Sensor status */}
+        {/* SENSOR STATUS */}
         <View style={styles.sensorCard}>
           <Text style={styles.sectionTitle}>Active Sensors</Text>
           <View style={styles.sensorList}>
@@ -380,7 +430,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         </View>
 
-        {/* Footer */}
+        {/* FOOTER */}
         <View style={styles.footer}>
           <Button title="Logout" onPress={handleLogout} color={colors.textSecondary} />
           <Text style={styles.footerText}>
@@ -389,7 +439,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
       </ScrollView>
 
-      {/* Countdown overlay */}
+      {/* COUNTDOWN OVERLAY */}
       {countdown !== null && (
         <View style={styles.countdownOverlay}>
           <View style={styles.countdownCard}>
@@ -424,9 +474,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.l,
   },
   headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: spacing.s,
   },
   appTitle: {
@@ -440,9 +490,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   demoText: {
-    color: 'white',
+    color: "white",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   tagline: {
     fontSize: 14,
@@ -451,7 +501,7 @@ const styles = StyleSheet.create({
   },
   contactWarning: {
     marginTop: spacing.m,
-    backgroundColor: colors.warning + '20',
+    backgroundColor: colors.warning + "20",
     padding: spacing.s,
     borderRadius: 8,
     borderWidth: 1,
@@ -460,7 +510,7 @@ const styles = StyleSheet.create({
   contactWarningText: {
     color: colors.warning,
     fontSize: 13,
-    textAlign: 'center',
+    textAlign: "center",
   },
   sosSection: {
     backgroundColor: colors.card,
@@ -471,9 +521,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: spacing.s,
   },
   sectionTitle: {
@@ -484,7 +534,7 @@ const styles = StyleSheet.create({
   contactsInfo: {
     fontSize: 12,
     color: colors.success,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   sectionSubtitle: {
     fontSize: 13,

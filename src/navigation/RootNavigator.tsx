@@ -1,15 +1,16 @@
 import React, { useContext } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { View, ActivityIndicator } from "react-native";
+
 import LoginScreen from "../screens/LoginScreen";
 import HomeScreen from "../screens/HomeScreen";
 import MapScreen from "../screens/MapScreen";
 import GeoFenceScreen from "../screens/GeoFenceScreen";
-import { AuthContext } from "../context/AuthContext";
-import { View, ActivityIndicator } from "react-native";
 import ProfileScreen from "../screens/ProfileScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 
+import { AuthContext } from "../context/AuthContext";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -25,34 +26,41 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const { user, loading } = useContext(AuthContext);
 
+  // 🔥 Prevents flickering / ensures correct persistent login
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#000" />
       </View>
     );
   }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: true }}>
+      <Stack.Navigator>
         {user ? (
+          // Logged-in Screens
           <>
-            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen
+              name="Home"
+              component={HomeScreen}
+              options={{ headerShown: false }} // Cleaner UI
+            />
             <Stack.Screen name="Map" component={MapScreen} />
             <Stack.Screen name="GeoFence" component={GeoFenceScreen} />
             <Stack.Screen
-            name="Profile"
-            component={ProfileScreen}
-            options={{ title: "Profile & Contacts" }}
+              name="Profile"
+              component={ProfileScreen}
+              options={{ title: "Profile & Contacts" }}
             />
             <Stack.Screen
-             name="History"
-             component={HistoryScreen}
-             options={{ title: "My SOS History" }}
-             />
+              name="History"
+              component={HistoryScreen}
+              options={{ title: "My SOS History" }}
+            />
           </>
         ) : (
+          // Login Screen
           <Stack.Screen
             name="Login"
             component={LoginScreen}
