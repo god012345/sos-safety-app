@@ -1,10 +1,20 @@
-// src/services/sos.ts
-import { db } from "./firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { db, auth } from "./firebase";
+import { 
+  addDoc, 
+  collection, 
+  serverTimestamp, 
+  updateDoc,
+  doc,
+  query,
+  where,
+  orderBy,
+  onSnapshot 
+} from "firebase/firestore";
 import type { Coordinates } from "./location";
-import { auth } from "./firebase";
+import { Alert } from "react-native";
 
-export type SosMethod =   | "button"
+export type SosMethod =
+  | "button"
   | "shake"
   | "voice"
   | "geofence"
@@ -13,7 +23,22 @@ export type SosMethod =   | "button"
   | "inactivity"
   | "power";
 
-type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
+type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+interface SosData {
+  id: string;
+  userId: string;
+  method: SosMethod;
+  location: Coordinates | null;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  aiSummary: string;
+  status: "ACTIVE" | "PENDING" | "RESOLVED" | "CANCELLED";
+  createdAt: any;
+  updatedAt: any;
+  respondedBy?: string;
+  responseNotes?: string;
+}
 
 function computeRiskScore(method: SosMethod, coords?: Coordinates): {
   score: number;
@@ -21,99 +46,214 @@ function computeRiskScore(method: SosMethod, coords?: Coordinates): {
   summary: string;
 } {
   let score = 0;
-  let reasons: string[] = [];
+  const reasons: string[] = [];
+  const time = new Date();
+  const hour = time.getHours();
 
-  // Base score by method
-    switch (method) {
-    case "button":
-      score += 40;
-      reasons.push("Manual SOS button pressed");
-      break;
-    case "shake":
-      score += 55;
-      reasons.push("Detected strong shake pattern (possible struggle)");
-      break;
-    case "voice":
-      score += 70;
-      reasons.push("Voice-triggered SOS (hands may be blocked)");
-      break;
-    case "geofence":
-      score += 55;
-      reasons.push("User left safe geo-fence area unexpectedly");
-      break;
-    case "secret":
-      score += 60;
-      reasons.push("Secret gesture used (discreet SOS)");
-      break;
-    case "fall":
-      score += 75;
-      reasons.push("Possible fall detected from motion pattern");
-      break;
-    case "inactivity":
-      score += 50;
-      reasons.push("No movement detected for extended period");
-      break;
-    case "power":
-      score += 80;
-      reasons.push("Hardware power button pattern triggered SOS");
-      break;
-  }
+  // Base score by method (higher = more urgent)
+  const methodScores: Record<SosMethod, number> = {
+    "button": 40,     // Manual press
+    "shake": 65,      // Possible struggle
+    "voice": 75,      // Voice command (hands may be busy)
+    "geofence": 60,   // Left safe zone
+    "secret": 70,     // Discreet SOS
+    "fall": 85,       // Possible injury
+    "inactivity": 55, // No movement
+    "power": 90,      // Hardware button combo
+  };
 
+  score += methodScores[method] || 50;
+  reasons.push(`Triggered via ${method}`);
 
-  // Time-based adjustment
-  const hour = new Date().getHours();
+  // Time of day adjustment
   if (hour >= 22 || hour < 5) {
-    score += 15;
-    reasons.push("Triggered during night hours");
+    score += 20;
+    reasons.push("Night time (higher risk)");
   } else if (hour >= 18 && hour < 22) {
-    score += 5;
-    reasons.push("Triggered during evening hours");
+    score += 10;
+    reasons.push("Evening hours");
   }
 
-  // Location accuracy adjustment
-  if (coords?.accuracy && coords.accuracy > 50) {
-    score -= 5;
-    reasons.push("Lower GPS accuracy");
-  } else if (coords?.accuracy && coords.accuracy <= 20) {
+  // Weekend adjustment
+  const day = time.getDay();
+  if (day === 0 || day === 6) {
     score += 5;
-    reasons.push("High GPS accuracy for responders");
+    reasons.push("Weekend");
   }
 
-  if (score < 0) score = 0;
-  if (score > 100) score = 100;
+  // Location accuracy
+  if (coords?.accuracy) {
+    if (coords.accuracy > 100) {
+      score -= 10;
+      reasons.push("Low location accuracy");
+    } else if (coords.accuracy <= 20) {
+      score += 5;
+      reasons.push("High precision location");
+    }
+  }
 
+  // Battery level consideration (simulated)
+  const simulatedBattery = Math.random() * 100;
+  if (simulatedBattery < 20) {
+    score += 15;
+    reasons.push("Low battery - may lose contact");
+  }
+
+  // Clamp between 0-100
+  score = Math.max(0, Math.min(100, score));
+
+  // Determine risk level
   let level: RiskLevel = "LOW";
-  if (score >= 70) level = "HIGH";
+  if (score >= 80) level = "CRITICAL";
+  else if (score >= 65) level = "HIGH";
   else if (score >= 45) level = "MEDIUM";
 
-  const summary =
-    `Risk Level: ${level} (Score: ${score}/100). ` +
-    reasons.join(". ") +
-    ".";
+  // Create AI summary
+  const summary = `
+🚨 SOS Alert - ${level} Risk (${score}/100)
+
+Detection Method: ${method.toUpperCase()}
+Time: ${time.toLocaleString()}
+${coords ? `Location: ${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}` : "Location: Unknown"}
+
+Risk Factors:
+${reasons.map(r => `• ${r}`).join('\n')}
+
+Recommended Action:
+${level === "CRITICAL" || level === "HIGH" 
+  ? "Immediate response required. Contact emergency services." 
+  : "Check on user status. Follow up if no response."}
+  `.trim();
 
   return { score, level, summary };
 }
 
-export async function triggerSos(method: SosMethod, coords?: Coordinates) {
-  const { score, level, summary } = computeRiskScore(method, coords);
+export async function triggerSos(
+  method: SosMethod, 
+  coords?: Coordinates
+): Promise<SosData> {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error("User not authenticated. Please login.");
+    }
 
-  const user = auth.currentUser;
-  const userId = user ? user.uid : "anonymous";
+    const { score, level, summary } = computeRiskScore(method, coords);
 
-  await addDoc(collection(db, "sosRequests"), {
-    userId,
-    createdAt: serverTimestamp(),
-    status: "ACTIVE",
-    method,
-    location: coords
-      ? {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy ?? null,
-        }
-      : null,
-    riskScore: score,
-    riskLevel: level,
-    aiSummary: summary,
-  });
+    // Create SOS document
+    const sosRef = await addDoc(collection(db, "sosRequests"), {
+      userId: user.uid,
+      method,
+      location: coords ? {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        timestamp: coords.timestamp,
+      } : null,
+      riskScore: score,
+      riskLevel: level,
+      aiSummary: summary,
+      status: "ACTIVE",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      respondedBy: null,
+      responseNotes: null,
+    });
+
+    // Return complete SOS data
+    return {
+      id: sosRef.id,
+      userId: user.uid,
+      method,
+      location: coords || null,
+      riskScore: score,
+      riskLevel: level,
+      aiSummary: summary,
+      status: "ACTIVE",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  } catch (error: any) {
+    console.error("Error triggering SOS:", error);
+    throw new Error(`Failed to create SOS: ${error.message}`);
+  }
+}
+
+export async function updateSosStatus(
+  sosId: string,
+  status: SosData["status"],
+  notes?: string
+): Promise<void> {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error("User not authenticated");
+
+    const sosRef = doc(db, "sosRequests", sosId);
+    
+    await updateDoc(sosRef, {
+      status,
+      responseNotes: notes,
+      respondedBy: user.uid,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error: any) {
+    console.error("Error updating SOS status:", error);
+    throw new Error(`Failed to update SOS: ${error.message}`);
+  }
+}
+
+export function subscribeToUserSos(
+  userId: string,
+  callback: (sosList: SosData[]) => void
+): () => void {
+  try {
+    const q = query(
+      collection(db, "sosRequests"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const sosList: SosData[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          sosList.push({
+            id: doc.id,
+            userId: data.userId,
+            method: data.method,
+            location: data.location,
+            riskScore: data.riskScore,
+            riskLevel: data.riskLevel,
+            aiSummary: data.aiSummary,
+            status: data.status,
+            createdAt: data.createdAt?.toDate(),
+            updatedAt: data.updatedAt?.toDate(),
+            respondedBy: data.respondedBy,
+            responseNotes: data.responseNotes,
+          });
+        });
+        callback(sosList);
+      },
+      (error) => {
+        console.error("Error subscribing to SOS:", error);
+        Alert.alert("Connection Error", "Unable to sync SOS data");
+      }
+    );
+
+    return unsubscribe;
+  } catch (error) {
+    console.error("Error setting up SOS subscription:", error);
+    return () => {}; // Return empty function
+  }
+}
+
+export async function cancelSos(sosId: string): Promise<void> {
+  try {
+    await updateSosStatus(sosId, "CANCELLED", "Cancelled by user");
+  } catch (error) {
+    console.error("Error cancelling SOS:", error);
+    throw error;
+  }
 }

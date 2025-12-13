@@ -1,4 +1,3 @@
-// src/components/SosButton.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -6,123 +5,110 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Button,
 } from "react-native";
 import { getCurrentLocation } from "../services/location";
 import { triggerSos } from "../services/sos";
-import { sendEmergencySms } from "../services/sms";
+import type { Coordinates } from "../services/location";
+import { colors, spacing } from "../config/theme";
 
-export default function SosButton() {
-  const [status, setStatus] = useState<string>("");
+type SosButtonProps = {
+  onAfterSos?: (coords?: Coordinates, aiSummary?: string) => void;
+};
+
+export default function SosButton({ onAfterSos }: SosButtonProps) {
   const [loading, setLoading] = useState(false);
-  const [smsLoading, setSmsLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
-  const handleAppSos = async () => {
+  const handlePress = async () => {
     try {
       setLoading(true);
-      setStatus("Getting location...");
+      setStatus("Getting your location...");
       const coords = await getCurrentLocation();
-
-      setStatus("Sending SOS via internet...");
-      await triggerSos("button", coords);
-
-      setStatus("✅ SOS sent with location (online)!");
-    } catch (error: any) {
-      console.error(error);
-      setStatus("❌ " + (error.message || "Failed to send SOS"));
+      
+      setStatus("Creating SOS alert...");
+      const sos = await triggerSos("button", coords);
+      
+      setStatus("SOS created! Preparing alerts...");
+      
+      // FIX: Pass both parameters to callback
+      if (onAfterSos) {
+        onAfterSos(coords, sos.aiSummary);
+      }
+    } catch (e: any) {
+      console.error(e);
+      setStatus(e?.message || "Failed to trigger SOS");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSmsSos = async () => {
-    try {
-      setSmsLoading(true);
-      setStatus("Getting location for SMS...");
-      const coords = await getCurrentLocation();
-
-      setStatus("Opening SMS app with emergency message...");
-      const result = await sendEmergencySms(coords);
-
-      if (result === "sent") {
-        setStatus("✅ SMS SOS sent!");
-      } else {
-        setStatus("⚠️ SMS cancelled by user.");
-      }
-    } catch (error: any) {
-      console.error(error);
-      setStatus("❌ " + (error.message || "Failed to send SMS SOS"));
-    } finally {
-      setSmsLoading(false);
-    }
-  };
-
   return (
-    <View style={styles.wrapper}>
+    <View style={styles.container}>
       <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
+        style={[styles.sosButton, loading && styles.sosButtonDisabled]}
+        onPress={handlePress}
+        disabled={loading}
         activeOpacity={0.8}
-        onPress={handleAppSos}
-        disabled={loading || smsLoading}
       >
-        {loading ? (
-          <ActivityIndicator size="large" />
-        ) : (
-          <Text style={styles.buttonText}>SOS</Text>
-        )}
+        <Text style={styles.sosButtonText}>
+          {loading ? "🚨 SENDING..." : "🚨 SEND SOS"}
+        </Text>
+        {loading && <ActivityIndicator color="white" style={styles.spinner} />}
       </TouchableOpacity>
-
-      <View style={styles.smsButtonWrapper}>
-        <Button
-          title={
-            smsLoading
-              ? "Preparing SMS..."
-              : "Send SOS via SMS (Offline Fallback)"
-          }
-          onPress={handleSmsSos}
-          disabled={loading || smsLoading}
-        />
-      </View>
-
-      {status ? <Text style={styles.status}>{status}</Text> : null}
+      
+      {status && <Text style={styles.status}>{status}</Text>}
+      
+      <Text style={styles.hint}>
+        Tap to send emergency alert to your contacts
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
+  container: {
     alignItems: "center",
-    justifyContent: "center",
+    width: "100%",
   },
-  button: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: "#ff3b30",
+  sosButton: {
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.l,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    width: "100%",
     elevation: 8,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    flexDirection: 'row',
+    gap: spacing.s,
   },
-  buttonDisabled: {
-    opacity: 0.7,
+  sosButtonDisabled: {
+    backgroundColor: colors.textSecondary,
   },
-  buttonText: {
+  sosButtonText: {
     color: "white",
-    fontSize: 36,
+    fontSize: 20,
     fontWeight: "bold",
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
-  smsButtonWrapper: {
-    marginTop: 20,
-    width: 260,
+  spinner: {
+    marginLeft: spacing.s,
   },
   status: {
-    marginTop: 12,
+    marginTop: spacing.m,
     fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  hint: {
+    marginTop: spacing.s,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: "italic",
     textAlign: "center",
   },
 });
