@@ -2,10 +2,16 @@
 import { useEffect, useRef } from "react";
 import { Accelerometer } from "expo-sensors";
 
+/**
+ * Calculate acceleration magnitude
+ */
 function magnitude(x: number, y: number, z: number) {
   return Math.sqrt(x * x + y * y + z * z);
 }
 
+/**
+ * Cooldown helper to avoid repeated triggers
+ */
 function canTrigger(
   lastRef: React.MutableRefObject<number>,
   cooldownMs: number
@@ -17,8 +23,8 @@ function canTrigger(
 }
 
 /**
- * Shake detector hook:
- * Only detects shakes and calls `onShake`.
+ * SHAKE DETECTION
+ * Triggers when strong acceleration detected
  */
 export function useShakeToSos(
   enabled: boolean = true,
@@ -29,12 +35,15 @@ export function useShakeToSos(
   useEffect(() => {
     if (!enabled || !onShake) return;
 
-    let sub: any;
+    let subscription: any;
 
     const subscribe = async () => {
-      await Accelerometer.setUpdateInterval(200); // every 200ms
-      sub = Accelerometer.addListener((data) => {
-        const g = magnitude(data.x, data.y, data.z); // ~1g at rest
+      const available = await Accelerometer.isAvailableAsync();
+      if (!available) return;
+
+      Accelerometer.setUpdateInterval(200); // 200ms
+      subscription = Accelerometer.addListener(({ x, y, z }) => {
+        const g = magnitude(x, y, z); // ~1g at rest
 
         if (g > 2.2 && canTrigger(lastTriggerRef, 6000)) {
           onShake();
@@ -45,37 +54,39 @@ export function useShakeToSos(
     subscribe();
 
     return () => {
-      if (sub) sub.remove();
+      subscription?.remove();
     };
   }, [enabled, onShake]);
 }
 
 /**
- * Fall detection hook:
- * Simple heuristic: near free-fall + strong impact.
- * Calls `onFall()` when pattern is detected.
+ * FALL DETECTION
+ * Detects near free-fall followed by strong impact
  */
 export function useFallDetectionSos(
   enabled: boolean = true,
   onFall?: () => void
 ) {
   const lastTriggerRef = useRef(0);
-  const previousMagRef = useRef(1);
+  const prevMagRef = useRef(1);
 
   useEffect(() => {
     if (!enabled || !onFall) return;
 
-    let sub: any;
+    let subscription: any;
 
     const subscribe = async () => {
-      await Accelerometer.setUpdateInterval(100);
-      sub = Accelerometer.addListener((data) => {
-        const g = magnitude(data.x, data.y, data.z);
-        const prev = previousMagRef.current;
-        previousMagRef.current = g;
+      const available = await Accelerometer.isAvailableAsync();
+      if (!available) return;
 
-        const freeFall = prev < 0.3; // almost weightless
-        const hardImpact = g > 2.8; // strong hit
+      Accelerometer.setUpdateInterval(100);
+      subscription = Accelerometer.addListener(({ x, y, z }) => {
+        const g = magnitude(x, y, z);
+        const prev = prevMagRef.current;
+        prevMagRef.current = g;
+
+        const freeFall = prev < 0.3;
+        const hardImpact = g > 2.8;
 
         if (freeFall && hardImpact && canTrigger(lastTriggerRef, 10000)) {
           onFall();
@@ -86,14 +97,14 @@ export function useFallDetectionSos(
     subscribe();
 
     return () => {
-      if (sub) sub.remove();
+      subscription?.remove();
     };
   }, [enabled, onFall]);
 }
 
 /**
- * Inactivity detection hook:
- * No significant movement for some time -> calls `onInactivity`.
+ * INACTIVITY DETECTION
+ * No movement for threshold time → SOS
  */
 export function useInactivitySos(
   enabled: boolean = false,
@@ -105,22 +116,25 @@ export function useInactivitySos(
   useEffect(() => {
     if (!enabled || !onInactivity) return;
 
-    let sub: any;
-    let checkInterval: any;
+    let subscription: any;
+    let intervalId: any;
 
     const subscribe = async () => {
-      await Accelerometer.setUpdateInterval(1000); // every 1s
-      sub = Accelerometer.addListener((data) => {
-        const g = magnitude(data.x, data.y, data.z);
+      const available = await Accelerometer.isAvailableAsync();
+      if (!available) return;
+
+      Accelerometer.setUpdateInterval(1000); // 1s
+      subscription = Accelerometer.addListener(({ x, y, z }) => {
+        const g = magnitude(x, y, z);
         if (Math.abs(g - 1) > 0.1) {
           lastMovementRef.current = Date.now();
         }
       });
 
-      checkInterval = setInterval(() => {
+      intervalId = setInterval(() => {
         const now = Date.now();
         const inactiveMs = now - lastMovementRef.current;
-        const thresholdMs = 30 * 1000; // 30s demo
+        const thresholdMs = 30 * 1000; // 30s (demo)
 
         if (
           inactiveMs > thresholdMs &&
@@ -134,8 +148,8 @@ export function useInactivitySos(
     subscribe();
 
     return () => {
-      if (sub) sub.remove();
-      if (checkInterval) clearInterval(checkInterval);
+      subscription?.remove();
+      if (intervalId) clearInterval(intervalId);
     };
   }, [enabled, onInactivity]);
 }

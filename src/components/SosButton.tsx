@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { getCurrentLocation } from "../services/location";
 import { triggerSos } from "../services/sos";
@@ -23,19 +24,28 @@ export default function SosButton({ onAfterSos }: SosButtonProps) {
     try {
       setLoading(true);
       setStatus("Getting your location...");
-      const coords = await getCurrentLocation();
-      
+
+      let coords: Coordinates | undefined;
+
+      try {
+        coords = await getCurrentLocation();
+      } catch {
+        // Location failed, still allow SOS
+        Alert.alert(
+          "Location Error",
+          "Unable to get location. SOS will be sent without GPS."
+        );
+      }
+
       setStatus("Creating SOS alert...");
       const sos = await triggerSos("button", coords);
-      
-      setStatus("SOS created! Preparing alerts...");
-      
-      // FIX: Pass both parameters to callback
-      if (onAfterSos) {
-        onAfterSos(coords, sos.aiSummary);
-      }
+
+      setStatus("SOS created! Sending alerts...");
+
+      // ✅ Correctly pass data to HomeScreen
+      onAfterSos?.(coords, sos.aiSummary);
     } catch (e: any) {
-      console.error(e);
+      console.error("SOS Button Error:", e);
       setStatus(e?.message || "Failed to trigger SOS");
     } finally {
       setLoading(false);
@@ -55,9 +65,9 @@ export default function SosButton({ onAfterSos }: SosButtonProps) {
         </Text>
         {loading && <ActivityIndicator color="white" style={styles.spinner} />}
       </TouchableOpacity>
-      
+
       {status && <Text style={styles.status}>{status}</Text>}
-      
+
       <Text style={styles.hint}>
         Tap to send emergency alert to your contacts
       </Text>
@@ -83,7 +93,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.s,
   },
   sosButtonDisabled: {

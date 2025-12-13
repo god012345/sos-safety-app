@@ -17,14 +17,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Firebase auto-restores user session here
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
     });
 
-    // Cleanup listener
-    return () => unsubscribe();
+    return unsubscribe; // clean & correct
   }, []);
 
   return (

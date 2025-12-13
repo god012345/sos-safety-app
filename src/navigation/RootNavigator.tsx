@@ -11,6 +11,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 
 import { AuthContext } from "../context/AuthContext";
+import { colors } from "../config/theme";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -26,25 +27,29 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const { user, loading } = useContext(AuthContext);
 
-  // 🔥 Prevents flickering / ensures correct persistent login
+  // ⏳ Wait for Firebase auth to restore session
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#000" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator>
+      <Stack.Navigator
+        initialRouteName={user ? "Home" : "Login"}
+        screenOptions={{
+          headerShown: true, // default
+        }}
+      >
         {user ? (
-          // Logged-in Screens
           <>
             <Stack.Screen
               name="Home"
               component={HomeScreen}
-              options={{ headerShown: false }} // Cleaner UI
+              options={{ headerShown: false }}
             />
             <Stack.Screen name="Map" component={MapScreen} />
             <Stack.Screen name="GeoFence" component={GeoFenceScreen} />
@@ -60,7 +65,6 @@ export default function RootNavigator() {
             />
           </>
         ) : (
-          // Login Screen
           <Stack.Screen
             name="Login"
             component={LoginScreen}
