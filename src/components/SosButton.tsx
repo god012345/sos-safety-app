@@ -1,18 +1,18 @@
-// src/components/SosButton.tsx
 import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Button,
+  TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
 import { getCurrentLocation } from "../services/location";
 import { triggerSos } from "../services/sos";
 import type { Coordinates } from "../services/location";
+import { colors, spacing } from "../config/theme";
 
 type SosButtonProps = {
-  onAfterSos?: (coords?: Coordinates) => void;
+  onAfterSos?: (coords?: Coordinates, aiSummary?: string) => void;
 };
 
 export default function SosButton({ onAfterSos }: SosButtonProps) {
@@ -22,12 +22,17 @@ export default function SosButton({ onAfterSos }: SosButtonProps) {
   const handlePress = async () => {
     try {
       setLoading(true);
-      setStatus("Preparing SOS...");
+      setStatus("Getting your location...");
       const coords = await getCurrentLocation();
-      await triggerSos("button", coords);
-      setStatus("SOS created. Preparing alerts...");
+      
+      setStatus("Creating SOS alert...");
+      const sos = await triggerSos("button", coords);
+      
+      setStatus("SOS created! Preparing alerts...");
+      
+      // FIX: Pass both parameters to callback
       if (onAfterSos) {
-        onAfterSos(coords);
+        onAfterSos(coords, sos.aiSummary);
       }
     } catch (e: any) {
       console.error(e);
@@ -39,13 +44,23 @@ export default function SosButton({ onAfterSos }: SosButtonProps) {
 
   return (
     <View style={styles.container}>
-      <Button
-        title={loading ? "Sending..." : "SEND SOS"}
+      <TouchableOpacity
+        style={[styles.sosButton, loading && styles.sosButtonDisabled]}
         onPress={handlePress}
         disabled={loading}
-      />
-      {loading && <ActivityIndicator style={{ marginTop: 8 }} />}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.sosButtonText}>
+          {loading ? "🚨 SENDING..." : "🚨 SEND SOS"}
+        </Text>
+        {loading && <ActivityIndicator color="white" style={styles.spinner} />}
+      </TouchableOpacity>
+      
       {status && <Text style={styles.status}>{status}</Text>}
+      
+      <Text style={styles.hint}>
+        Tap to send emergency alert to your contacts
+      </Text>
     </View>
   );
 }
@@ -53,10 +68,47 @@ export default function SosButton({ onAfterSos }: SosButtonProps) {
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
+    width: "100%",
+  },
+  sosButton: {
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.l,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    elevation: 8,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    flexDirection: 'row',
+    gap: spacing.s,
+  },
+  sosButtonDisabled: {
+    backgroundColor: colors.textSecondary,
+  },
+  sosButtonText: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
+  spinner: {
+    marginLeft: spacing.s,
   },
   status: {
-    marginTop: 8,
+    marginTop: spacing.m,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  hint: {
+    marginTop: spacing.s,
     fontSize: 12,
-    color: "#f9fafb",
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    textAlign: "center",
   },
 });
